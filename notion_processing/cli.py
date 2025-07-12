@@ -123,7 +123,7 @@ def extract(notion_token, notion_database_id, database_url, limit):
 @cli.command()
 @click.option('--openai-api-key', envvar='OPENAI_API_KEY', help='OpenAI API key')
 @click.option('--database-url', envvar='DATABASE_URL', help='PostgreSQL database URL')
-@click.option('--model', default='gpt-4', help='LLM model to use for classification')
+@click.option('--model', default='gpt-4.1-mini-2025-04-14', help='LLM model to use for classification')
 def classify(openai_api_key, database_url, model):
     """Classify extracted documents."""
     try:
@@ -147,7 +147,7 @@ def classify(openai_api_key, database_url, model):
 @click.option('--openai-api-key', envvar='OPENAI_API_KEY', help='OpenAI API key')
 @click.option('--database-url', envvar='DATABASE_URL', help='PostgreSQL database URL')
 @click.option('--date', type=click.DateTime(), help='Date for weekly summary (YYYY-MM-DD)')
-@click.option('--model', default='gpt-4', help='LLM model to use for summarization')
+@click.option('--model', default='gpt-4.1-mini-2025-04-14', help='LLM model to use for summarization')
 def summarize(openai_api_key, database_url, date, model):
     """Generate weekly summary report."""
     try:

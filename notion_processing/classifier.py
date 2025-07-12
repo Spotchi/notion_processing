@@ -22,7 +22,7 @@ logger = structlog.get_logger(__name__)
 class DocumentClassifier:
     """LLM-based document classifier."""
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4.1-mini-2025-04-14"):
         """Initialize the document classifier."""
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:

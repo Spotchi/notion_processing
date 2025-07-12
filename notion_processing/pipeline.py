@@ -26,7 +26,7 @@ class NotionProcessingPipeline:
         notion_database_id: Optional[str] = None,
         openai_api_key: Optional[str] = None,
         database_url: Optional[str] = None,
-        llm_model: str = "gpt-4"
+        llm_model: str = "gpt-4.1-mini-2025-04-14"
     ):
         """Initialize the processing pipeline."""
         self.notion_token = notion_token or os.getenv("NOTION_TOKEN")

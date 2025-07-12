@@ -22,7 +22,7 @@ logger = structlog.get_logger(__name__)
 class WeeklySummarizer:
     """Generates weekly summaries of processed documents."""
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4.1-mini-2025-04-14"):
         """Initialize the weekly summarizer."""
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
@@ -189,8 +189,8 @@ Focus on actionable insights and meaningful patterns in the data.
                     total_documents=stats["total_documents"],
                     documents_by_type=stats["documents_by_type"],
                     documents_by_subcategory=stats["documents_by_subcategory"],
-                    summary_text=summary_data["summary_text"],
-                    key_insights=summary_data["key_insights"]
+                    summary_text=summary_data.get("summary_text", ""),
+                    key_insights=summary_data.get("key_insights", [])
                 )
                 
                 logger.info(
