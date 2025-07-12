@@ -7,7 +7,8 @@ An intelligent data pipeline that extracts, classifies, and summarizes documents
 - **📥 Document Extraction**: Extract raw documents from Notion databases via API
 - **🏷️ AI Classification**: Use LLM to classify documents into project/knowledge categories with sub-categories
 - **📊 Weekly Summaries**: Generate comprehensive weekly reports of processed documents
-- **🗄️ PostgreSQL Storage**: Store all data and processing results in PostgreSQL
+- **📈 Interactive Dashboard**: Streamlit-based dashboard for visualizing weekly summaries and trends
+- **🗄️ Supabase Storage**: Store all data and processing results in Supabase (PostgreSQL)
 - **🔄 Pipeline Orchestration**: Modular pipeline design for flexible processing
 - **📈 Statistics & Monitoring**: Track processing status and statistics
 
@@ -15,7 +16,7 @@ An intelligent data pipeline that extracts, classifies, and summarizes documents
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Notion API    │───▶│   Extraction    │───▶│   PostgreSQL    │
+│   Notion API    │───▶│   Extraction    │───▶│   Supabase      │
 │   (Documents)   │    │   (Raw Data)    │    │   (Storage)     │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
                                 │                       │
@@ -58,7 +59,7 @@ An intelligent data pipeline that extracts, classifies, and summarizes documents
 ### 1. Prerequisites
 
 - Python 3.12+
-- PostgreSQL database
+- Supabase account and project
 - Notion API token
 - OpenAI API key
 - [uv](https://docs.astral.sh/uv/) package manager
@@ -79,20 +80,35 @@ cp env.example .env
 
 ### 3. Database Setup
 
-Using Docker Compose (recommended):
+#### Option A: Supabase (Recommended)
+
+1. **Create a Supabase project:**
+   - Go to [https://supabase.com](https://supabase.com)
+   - Sign up/login and create a new project
+   - Wait for the project to be ready
+
+2. **Get your connection string:**
+   - Go to Project Settings > Database
+   - Copy the 'Connection string' > 'URI'
+   - It should look like: `postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres`
+
+3. **Test your connection:**
+   ```bash
+   python migrate_to_supabase.py --test
+   ```
+
+#### Option B: Local PostgreSQL (Development)
+
+If you prefer to use local PostgreSQL for development:
+
 ```bash
+# Uncomment the services in docker-compose.yml
 # Start PostgreSQL and pgAdmin
 docker-compose up -d
 
 # The database will be available at:
 # - PostgreSQL: localhost:5432
 # - pgAdmin: http://localhost:8080 (admin@example.com / admin)
-```
-
-Or using a local PostgreSQL instance:
-```bash
-# Create database
-createdb notion_processing
 ```
 
 ### 4. Configuration
@@ -107,7 +123,11 @@ NOTION_DATABASE_ID=your_notion_database_id_here
 OPENAI_API_KEY=your_openai_api_key_here
 
 # Database Configuration
-DATABASE_URL=postgresql://notion_user:notion_password@localhost:5432/notion_processing
+# For Supabase (recommended):
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres
+
+# For local PostgreSQL (development):
+# DATABASE_URL=postgresql://notion_user:notion_password@localhost:5432/notion_processing
 ```
 
 ### 5. Setup Database Tables
@@ -127,6 +147,119 @@ uv run python -m notion_processing.cli extract --limit 10
 uv run python -m notion_processing.cli classify
 uv run python -m notion_processing.cli summarize
 ```
+
+### 7. Setup Authentication (Optional)
+
+The dashboard now includes Supabase authentication for secure access:
+
+```bash
+# Test authentication setup
+python test_auth.py
+
+# Configure authentication (see AUTHENTICATION_SETUP.md for details)
+# 1. Set up Supabase project
+# 2. Configure .streamlit/secrets.toml
+# 3. Test the setup
+```
+
+### 8. View Dashboard
+
+```bash
+# Generate sample data for testing (optional)
+make sample-data
+
+# Start the interactive dashboard
+make dashboard
+
+# Or run directly with streamlit
+uv run streamlit run streamlit_app.py
+```
+
+The dashboard will be available at `http://localhost:8501`
+
+> **Note**: If authentication is enabled, you'll need to log in or create an account to access the dashboard.
+
+> **Note**: If you don't have any weekly summaries yet, you can generate sample data using `make sample-data` to test the dashboard functionality.
+
+## Dashboard
+
+The Streamlit dashboard provides an interactive interface to visualize and analyze weekly summaries:
+
+### Features
+
+- **🔐 Authentication**: Secure login/signup with Supabase authentication
+- **📊 Overview Metrics**: Total weeks, documents, and averages
+- **📈 Trend Analysis**: Interactive charts showing document types and sub-categories over time
+- **📋 Weekly Details**: Detailed view of individual weekly summaries with insights
+- **🔍 Filtering**: Date range filtering to focus on specific periods
+- **📥 Data Export**: Download summary data as CSV
+- **🎨 Interactive Charts**: Plotly-based visualizations with hover details
+- **👤 User Management**: User information display and session management
+
+### Dashboard Sections
+
+1. **Overview**: Key metrics and statistics
+2. **Trends**: Interactive charts for document types, sub-categories, and total documents
+3. **Weekly Details**: Detailed breakdown of selected weekly summaries
+4. **Raw Data**: Tabular view with export functionality
+
+### Running the Dashboard
+
+```bash
+# Using Makefile (recommended)
+make dashboard
+
+# Direct streamlit command
+uv run streamlit run streamlit_app.py
+
+# With custom port
+uv run streamlit run streamlit_app.py --server.port 8502
+```
+
+## Migration from Local PostgreSQL to Supabase
+
+If you're migrating from a local PostgreSQL setup to Supabase:
+
+### Quick Migration
+
+1. **Run the migration helper:**
+   ```bash
+   python migrate_to_supabase.py
+   ```
+
+2. **Follow the step-by-step instructions provided by the migration script**
+
+3. **Test your connection:**
+   ```bash
+   python migrate_to_supabase.py --test
+   ```
+
+### Manual Migration Steps
+
+1. **Create a Supabase project** at [https://supabase.com](https://supabase.com)
+
+2. **Get your connection string** from Project Settings > Database > Connection string > URI
+
+3. **Update your `.env` file:**
+   ```bash
+   # Replace your local DATABASE_URL with Supabase URL
+   DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres
+   ```
+
+4. **Test the connection:**
+   ```bash
+   uv run python -m notion_processing.cli setup
+   ```
+
+5. **Run your application** - tables will be created automatically
+
+### Benefits of Supabase
+
+- **No local database setup required**
+- **Automatic backups and scaling**
+- **Built-in authentication and real-time features**
+- **Free tier available**
+- **Production-ready infrastructure**
 
 ## Usage
 
@@ -156,6 +289,9 @@ uv run python -m notion_processing.cli setup
 
 # Show current configuration
 uv run python -m notion_processing.cli config
+
+# Run interactive dashboard
+make dashboard
 ```
 
 ### Programmatic Usage

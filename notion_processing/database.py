@@ -95,11 +95,19 @@ class DatabaseManager:
                 "postgresql://user:password@localhost:5432/notion_processing"
             )
         
-        self.engine = create_engine(
-            database_url,
-            poolclass=StaticPool,
-            pool_pre_ping=True,
-        )
+        # Configure engine with SSL for Supabase
+        engine_kwargs = {
+            "poolclass": StaticPool,
+            "pool_pre_ping": True,
+        }
+        
+        # Add SSL configuration for Supabase
+        if "supabase.co" in database_url:
+            engine_kwargs["connect_args"] = {
+                "sslmode": "require"
+            }
+        
+        self.engine = create_engine(database_url, **engine_kwargs)
         self.SessionLocal = sessionmaker(
             autocommit=False,
             autoflush=False,

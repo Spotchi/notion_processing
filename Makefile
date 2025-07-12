@@ -58,10 +58,21 @@ summarize: ## Generate weekly summary
 stats: ## Show processing statistics
 	uv run python -m notion_processing.cli stats
 
+dashboard: ## Run Streamlit dashboard
+	uv run python run_dashboard.py
+
+dashboard-direct: ## Run Streamlit dashboard directly
+	uv run streamlit run streamlit_app.py --server.port 8501 --server.address 0.0.0.0
+
+sample-data: ## Generate sample weekly summary data for testing
+	uv run python generate_sample_data.py
+
 config: ## Show current configuration
 	uv run python -m notion_processing.cli config
 
-docker-up: ## Start PostgreSQL and pgAdmin with Docker
+docker-up: ## Start local PostgreSQL and pgAdmin with Docker (for development)
+	@echo "Note: This project now uses Supabase by default"
+	@echo "To use local PostgreSQL for development, uncomment services in docker-compose.yml"
 	docker-compose up -d
 
 docker-down: ## Stop Docker services
@@ -74,14 +85,14 @@ docker-clean: ## Stop and remove Docker containers and volumes
 	docker-compose down -v
 	docker system prune -f
 
-dev-setup: install-dev docker-up setup ## Complete development setup
+dev-setup: install-dev setup ## Complete development setup (uses Supabase)
 
 # Example usage with environment variables
 run-example: ## Run pipeline with example parameters
 	NOTION_TOKEN=your_token \
 	NOTION_DATABASE_ID=your_db_id \
 	OPENAI_API_KEY=your_key \
-	DATABASE_URL=postgresql://notion_user:notion_password@localhost:5432/notion_processing \
+	DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres \
 	uv run python -m notion_processing.cli run --limit 5
 
 # Database operations
@@ -91,7 +102,7 @@ db-migrate: ## Run database migrations (if using Alembic)
 db-rollback: ## Rollback database migrations
 	uv run alembic downgrade -1
 
-db-reset: docker-down docker-clean docker-up setup ## Reset database completely
+db-reset: setup ## Reset database completely (Supabase)
 
 # Monitoring
 logs: ## Show application logs
@@ -114,3 +125,4 @@ uv-update: ## Update all dependencies
 	uv lock --upgrade
 
 uv-sync: ## Sync dependencies 
+	uv sync
