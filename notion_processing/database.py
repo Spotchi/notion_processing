@@ -104,7 +104,7 @@ class DatabaseManager:
             
             # Fallback to default if still None
             if database_url is None:
-                database_url = "postgresql://user:password@localhost:5432/notion_processing"
+                raise ValueError("DATABASE_URL is not set")
         
         # Configure engine with SSL for Supabase
         engine_kwargs = {
