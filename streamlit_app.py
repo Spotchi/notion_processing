@@ -13,7 +13,7 @@ from st_supabase_connection import SupabaseConnection
 
 from plotly.subplots import make_subplots
 
-from notion_processing.database import WeeklySummaryDB, db_manager
+from notion_processing.database import WeeklySummaryDB, db_manager, NotionDocumentDB
 from notion_processing.models import WeeklySummary
 
 
@@ -271,6 +271,36 @@ def load_weekly_summaries() -> List[WeeklySummary]:
         session.close()
 
 
+def get_documents_by_date_range(week_start: datetime, week_end: datetime) -> List[dict]:
+    """Get documents from the database for a specific date range."""
+    session = db_manager.get_session()
+    
+    try:
+        # Query documents created within the date range
+        documents = session.query(NotionDocumentDB).filter(
+            NotionDocumentDB.created_time >= week_start,
+            NotionDocumentDB.created_time <= week_end
+        ).order_by(NotionDocumentDB.created_time.desc()).all()
+        
+        document_details = []
+        for doc in documents:
+            document_details.append({
+                'id': doc.id,
+                'title': doc.title,
+                'url': doc.url,
+                'created_time': doc.created_time,
+                'last_edited_time': doc.last_edited_time
+            })
+        
+        return document_details
+    
+    except Exception as e:
+        st.error(f"Error loading documents by date range: {str(e)}")
+        return []
+    finally:
+        session.close()
+
+
 def create_document_type_chart(summaries: List[WeeklySummary]) -> go.Figure:
     """Create a chart showing document types over time."""
     data = []
@@ -386,6 +416,34 @@ def display_summary_details(summary: WeeklySummary):
         for i, insight in enumerate(summary.key_insights, 1):
             st.write(f"{i}. {insight}")
     
+    # Document list
+    st.subheader("📄 Documents in This Week")
+    st.markdown("Querying documents by date range...")
+    
+    with st.spinner("Loading documents for this week..."):
+        document_details = get_documents_by_date_range(summary.week_start, summary.week_end)
+    
+    if document_details:
+        st.markdown(f"Found **{len(document_details)}** documents created during this week.")
+        
+        # Create a DataFrame for the documents
+        doc_df = pd.DataFrame(document_details)
+        doc_df['created_time'] = pd.to_datetime(doc_df['created_time']).dt.strftime('%Y-%m-%d %H:%M')
+        doc_df['last_edited_time'] = pd.to_datetime(doc_df['last_edited_time']).dt.strftime('%Y-%m-%d %H:%M')
+        
+        # Display documents with clickable titles using markdown
+        st.markdown("### Documents")
+        
+        for _, doc in doc_df.iterrows():
+            col1, col2, col3 = st.columns([4, 1, 1])
+            with col1:
+                st.markdown(f"[**{doc['title']}**]({doc['url']})")
+            with col2:
+                st.caption(f"Created: {doc['created_time']}")
+            with col3:
+                st.caption(f"Edited: {doc['last_edited_time']}")
+            st.markdown("")
+    
     # Document type breakdown
     if summary.documents_by_type:
         st.subheader("Document Types")
@@ -458,6 +516,9 @@ def main():
     # Show user info and logout button in sidebar
     show_user_info()
     logout_button()
+    
+    # Information about new features
+    st.info("💡 **New Feature**: You can now view the list of documents for each weekly summary. The system queries documents by date range to show you what was processed during each week.")
     
     # Load data
     with st.spinner("Loading weekly summaries..."):

@@ -6,7 +6,7 @@ An intelligent data pipeline that extracts, classifies, and summarizes documents
 
 - **📥 Document Extraction**: Extract raw documents from Notion databases via API
 - **🏷️ AI Classification**: Use LLM to classify documents into project/knowledge categories with sub-categories
-- **📊 Weekly Summaries**: Generate comprehensive weekly reports of processed documents
+- **📊 Weekly Summaries**: Generate comprehensive weekly reports of processed documents with mindset analysis
 - **📈 Interactive Dashboard**: Streamlit-based dashboard for visualizing weekly summaries and trends
 - **🗄️ Supabase Storage**: Store all data and processing results in Supabase (PostgreSQL)
 - **🔄 Pipeline Orchestration**: Modular pipeline design for flexible processing
@@ -53,6 +53,62 @@ An intelligent data pipeline that extracts, classifies, and summarizes documents
 - `best_practice`: Best practices, guidelines, standards
 - `case_study`: Case studies, examples, success stories
 - `documentation`: Technical documentation, API docs, etc.
+
+## Mindset Analysis
+
+The system now includes advanced mindset analysis capabilities that go beyond simple document classification to provide insights into your thinking patterns, interests, and mental state.
+
+### Features
+
+- **🧠 Content Analysis**: Analyzes document content to understand your interests and focus areas
+- **📈 Pattern Recognition**: Identifies recurring themes and thinking patterns across your documents
+- **🎯 Mindset Indicators**: Detects mindset characteristics like learning focus, project orientation, or research tendencies
+- **📊 AI-Powered Insights**: Uses LLM to generate human-like insights about your cognitive patterns
+
+### Mindset Analysis Methods
+
+#### 1. Content-Based Analysis
+- Analyzes the actual text content of your documents
+- Identifies themes, topics, and writing patterns
+- Provides insights into your current interests and focus areas
+
+#### 2. Pattern Recognition
+- Examines document types and categories for patterns
+- Identifies dominant thinking modes (learning, project management, research, etc.)
+- Tracks changes in focus over time
+
+#### 3. AI-Generated Insights
+- Uses OpenAI's GPT models to generate natural language insights
+- Provides context-aware analysis of your mindset
+- Offers personalized recommendations based on your patterns
+
+### Usage Examples
+
+```python
+from notion_processing.summarizer import WeeklySummarizer
+
+# Initialize summarizer
+summarizer = WeeklySummarizer(api_key="your_openai_api_key")
+
+# Get detailed mindset insights
+insights = summarizer.get_mindset_insights()
+print(f"Mindset indicators: {insights['mindset_indicators']}")
+
+# Generate AI-powered weekly summary with mindset focus
+summary = summarizer.run_weekly_summary()
+print(f"AI Summary: {summary.summary_text}")
+print(f"Key Insights: {summary.key_insights}")
+```
+
+### Mindset Indicators
+
+The system can identify various mindset characteristics:
+
+- **Learning Focus**: High concentration on educational content and skill development
+- **Project Management**: Active engagement with planning and execution tasks
+- **Research Orientation**: Analytical thinking and investigation patterns
+- **Personal Reflection**: Strong self-awareness and introspective content
+- **Creative Thinking**: Innovation-focused and idea-generation patterns
 
 ## Quick Start
 
@@ -173,6 +229,15 @@ make dashboard
 
 # Or run directly with streamlit
 uv run streamlit run streamlit_app.py
+
+### 9. Run Mindset Analysis
+
+```bash
+# Run the mindset analysis example
+uv run python example_mindset_analysis.py
+```
+
+This will generate both detailed mindset insights and AI-powered weekly summaries focused on understanding your thinking patterns and interests.
 ```
 
 The dashboard will be available at `http://localhost:8501`
@@ -183,18 +248,32 @@ The dashboard will be available at `http://localhost:8501`
 
 ## Dashboard
 
-The Streamlit dashboard provides an interactive interface to visualize and analyze weekly summaries:
+The interactive Streamlit dashboard provides comprehensive visualization and analysis of your weekly summaries.
 
 ### Features
 
-- **🔐 Authentication**: Secure login/signup with Supabase authentication
 - **📊 Overview Metrics**: Total weeks, documents, and averages
-- **📈 Trend Analysis**: Interactive charts showing document types and sub-categories over time
-- **📋 Weekly Details**: Detailed view of individual weekly summaries with insights
-- **🔍 Filtering**: Date range filtering to focus on specific periods
-- **📥 Data Export**: Download summary data as CSV
-- **🎨 Interactive Charts**: Plotly-based visualizations with hover details
-- **👤 User Management**: User information display and session management
+- **📈 Trend Analysis**: Charts showing document types and sub-categories over time
+- **📋 Weekly Details**: Detailed view of each week's summary with:
+  - Summary text and key insights
+  - **📄 Document List**: View all documents used to create each summary
+  - Document type and sub-category breakdowns
+  - Interactive charts and visualizations
+- **📋 Raw Data Table**: Exportable data table with all summary information
+- **🔐 Authentication**: Secure login system with Supabase
+- **📅 Date Filtering**: Filter summaries by date range
+
+### Document List Feature
+
+The dashboard now includes a comprehensive document list for each weekly summary:
+
+- **Document Titles**: See the actual titles of all documents processed
+- **Creation Dates**: View when each document was created
+- **Last Edited**: Track when documents were last modified
+- **Direct Links**: Click to open documents directly in Notion
+- **Document Count**: See exactly how many documents contributed to each summary
+
+This feature helps you understand exactly which documents influenced each weekly summary and provides transparency into the summarization process.
 
 ### Dashboard Sections
 

@@ -33,12 +33,13 @@ class WeeklySummarizer:
         
         # Summary prompt template
         self.summary_prompt = """
-You are an expert analyst creating a weekly summary report of processed documents. Based on the provided data, create a comprehensive summary that includes:
+You are an expert analyst creating a weekly summary report that provides insights into the user's mindset and thinking patterns based on their document processing activity. Based on the provided data, create a comprehensive summary that includes:
 
-1. **Executive Summary**: A high-level overview of the week's document processing activity
-2. **Document Distribution**: Analysis of document types and categories
-3. **Key Insights**: Important patterns, trends, or notable findings
-4. **Recommendations**: Suggestions for action items or areas of focus
+1. **Executive Summary**: A high-level overview of the week's document processing activity and what it reveals about the user's current focus and interests
+2. **Mindset Analysis**: Deep analysis of the user's thinking patterns, interests, and mental state based on the content and types of documents processed
+3. **Document Distribution**: Analysis of document types and categories with insights into what this reveals about the user's priorities and areas of focus
+4. **Key Insights**: Important patterns, trends, or notable findings about the user's mindset, interests, and cognitive patterns
+5. **Recommendations**: Suggestions for leveraging insights about the user's mindset for personal development or productivity
 
 Weekly Data:
 - Total Documents: {total_documents}
@@ -46,17 +47,20 @@ Weekly Data:
 - Sub-categories: {documents_by_subcategory}
 - Document Details: {document_details}
 
+Document Contents:
+{document_contents}
+
 Please provide your response in the following JSON format:
 {{
-    "summary_text": "Comprehensive summary text (2-3 paragraphs)",
+    "summary_text": "Comprehensive summary text focusing on mindset insights (2-3 paragraphs)",
     "key_insights": [
-        "Insight 1",
-        "Insight 2",
-        "Insight 3"
+        "Mindset insight 1",
+        "Mindset insight 2", 
+        "Mindset insight 3"
     ]
 }}
 
-Focus on actionable insights and meaningful patterns in the data.
+Focus on understanding the user's mindset, thinking patterns, interests, and mental state based on both the content and categorization of their documents.
 """
 
         logger.info("Weekly summarizer initialized", model=model)
@@ -76,13 +80,14 @@ Focus on actionable insights and meaningful patterns in the data.
             ).filter(
                 NotionDocumentDB.created_time >= week_start,
                 NotionDocumentDB.created_time <= week_end
-            ).all()
+            ).order_by(NotionDocumentDB.created_time.desc()).all()  # Most recent first
             
             document_details = []
             for doc, classification in documents:
                 document_details.append({
                     "id": doc.id,
                     "title": doc.title,
+                    "content": doc.content,
                     "type": classification.document_type.value,
                     "sub_category": classification.sub_category.value,
                     "confidence": classification.confidence_score,
@@ -134,8 +139,8 @@ Focus on actionable insights and meaningful patterns in the data.
                     total_documents=0,
                     documents_by_type={},
                     documents_by_subcategory={},
-                    summary_text="No documents were processed during this week.",
-                    key_insights=["No activity to report for this week."]
+                    summary_text="No documents were processed during this week, making it difficult to analyze mindset patterns.",
+                    key_insights=["No document activity to analyze for mindset insights this week."],
                 )
             
             # Calculate statistics
@@ -151,23 +156,37 @@ Focus on actionable insights and meaningful patterns in the data.
             if len(documents) > 20:
                 document_details.append(f"... and {len(documents) - 20} more documents")
             
+            # Prepare document contents for the prompt (limit to first 10 documents to avoid token limits)
+            document_contents = []
+            for doc in documents[:10]:  # Limit to first 10 for content analysis
+                content_preview = doc['content'][:500] if len(doc['content']) > 500 else doc['content']
+                document_contents.append(
+                    f"Document: {doc['title']} ({doc['type']}/{doc['sub_category']})\n"
+                    f"Content Preview: {content_preview}\n"
+                    f"{'...' if len(doc['content']) > 500 else ''}\n"
+                )
+            
+            if len(documents) > 10:
+                document_contents.append(f"... and {len(documents) - 10} more documents with content")
+            
             # Prepare the prompt
             prompt = self.summary_prompt.format(
                 total_documents=stats["total_documents"],
                 documents_by_type=json.dumps(stats["documents_by_type"], indent=2),
                 documents_by_subcategory=json.dumps(stats["documents_by_subcategory"], indent=2),
-                document_details="\n".join(document_details)
+                document_details="\n".join(document_details),
+                document_contents="\n".join(document_contents)
             )
             
             # Call OpenAI API
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are an expert analyst creating weekly summary reports. Respond only with valid JSON."},
+                    {"role": "system", "content": "You are an expert analyst specializing in understanding human mindset and thinking patterns through document analysis. Your role is to provide insights into the user's mental state, interests, and cognitive patterns based on their document processing activity. Respond only with valid JSON."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.3,
-                max_tokens=1000
+                max_tokens=1500
             )
             
             # Parse the response
@@ -190,7 +209,7 @@ Focus on actionable insights and meaningful patterns in the data.
                     documents_by_type=stats["documents_by_type"],
                     documents_by_subcategory=stats["documents_by_subcategory"],
                     summary_text=summary_data.get("summary_text", ""),
-                    key_insights=summary_data.get("key_insights", [])
+                    key_insights=summary_data.get("key_insights", []),
                 )
                 
                 logger.info(
@@ -232,7 +251,7 @@ Focus on actionable insights and meaningful patterns in the data.
                 logger.info("Updated existing weekly summary", week_start=summary.week_start.date())
             else:
                 # Create new summary
-                db_summary = WeeklySummaryDB(
+                new_summary = WeeklySummaryDB(
                     week_start=summary.week_start,
                     week_end=summary.week_end,
                     total_documents=summary.total_documents,
@@ -242,7 +261,7 @@ Focus on actionable insights and meaningful patterns in the data.
                     key_insights=json.dumps(summary.key_insights),
                     generated_at=summary.generated_at
                 )
-                session.add(db_summary)
+                session.add(new_summary)
                 logger.info("Created new weekly summary", week_start=summary.week_start.date())
             
             session.commit()
@@ -283,4 +302,85 @@ Focus on actionable insights and meaningful patterns in the data.
         self.save_summary_to_db(summary)
         
         logger.info("Weekly summary completed successfully")
-        return summary 
+        return summary
+    
+    def get_mindset_insights(self, date: Optional[datetime] = None) -> dict:
+        """Get detailed mindset insights for a specific week."""
+        logger.info("Generating detailed mindset insights")
+        
+        # Get week boundaries
+        week_start, week_end = self.get_week_boundaries(date)
+        
+        # Get documents for the week
+        documents = self.get_weekly_documents(week_start, week_end)
+        
+        if not documents:
+            return {
+                "week_start": week_start.isoformat(),
+                "week_end": week_end.isoformat(),
+                "insights": "No documents available for mindset analysis",
+                "recommendations": ["Consider adding more documents to enable mindset analysis"]
+            }
+        
+        # Calculate statistics
+        stats = self.calculate_weekly_statistics(documents)
+        
+        # Analyze content patterns
+        content_analysis = self._analyze_content_patterns(documents)
+        
+        return {
+            "week_start": week_start.isoformat(),
+            "week_end": week_end.isoformat(),
+            "total_documents": stats["total_documents"],
+            "document_types": stats["documents_by_type"],
+            "sub_categories": stats["documents_by_subcategory"],
+            "content_patterns": content_analysis,
+            "mindset_indicators": self._extract_mindset_indicators(documents)
+        }
+    
+    def _analyze_content_patterns(self, documents: List[dict]) -> dict:
+        """Analyze patterns in document content."""
+        patterns = {
+            "avg_content_length": 0,
+            "content_themes": [],
+            "writing_style_indicators": []
+        }
+        
+        if not documents:
+            return patterns
+        
+        # Calculate average content length
+        total_length = sum(len(doc["content"]) for doc in documents)
+        patterns["avg_content_length"] = total_length / len(documents)
+        
+        # Simple theme detection (can be enhanced with NLP)
+        all_content = " ".join(doc["content"].lower() for doc in documents)
+        common_words = ["learning", "project", "idea", "research", "work", "personal", "business"]
+        patterns["content_themes"] = [word for word in common_words if word in all_content]
+        
+        return patterns
+    
+    def _extract_mindset_indicators(self, documents: List[dict]) -> List[str]:
+        """Extract mindset indicators from documents."""
+        indicators = []
+        
+        # Analyze document types for mindset patterns
+        type_counts = {}
+        for doc in documents:
+            doc_type = doc["type"]
+            type_counts[doc_type] = type_counts.get(doc_type, 0) + 1
+        
+        # Identify dominant patterns
+        if type_counts.get("learning", 0) > len(documents) * 0.5:
+            indicators.append("High focus on learning and personal development")
+        
+        if type_counts.get("project", 0) > len(documents) * 0.3:
+            indicators.append("Active project management and execution mindset")
+        
+        if type_counts.get("research", 0) > len(documents) * 0.2:
+            indicators.append("Research-oriented and analytical thinking")
+        
+        if type_counts.get("personal", 0) > len(documents) * 0.4:
+            indicators.append("Strong personal reflection and self-awareness")
+        
+        return indicators 
