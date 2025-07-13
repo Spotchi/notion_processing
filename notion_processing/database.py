@@ -90,10 +90,21 @@ class DatabaseManager:
     def __init__(self, database_url: Optional[str] = None):
         """Initialize database manager."""
         if database_url is None:
-            database_url = os.getenv(
-                "DATABASE_URL",
-                "postgresql://user:password@localhost:5432/notion_processing"
-            )
+            # Try to get from environment variable first
+            database_url = os.getenv("DATABASE_URL")
+            
+            # If not in environment, try to get from Streamlit secrets
+            if database_url is None:
+                try:
+                    import streamlit as st
+                    database_url = st.secrets.get("DATABASE_URL")
+                except (ImportError, AttributeError):
+                    # Streamlit not available or secrets not configured
+                    pass
+            
+            # Fallback to default if still None
+            if database_url is None:
+                database_url = "postgresql://user:password@localhost:5432/notion_processing"
         
         # Configure engine with SSL for Supabase
         engine_kwargs = {
