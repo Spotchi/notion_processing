@@ -485,7 +485,14 @@ def display_summary_details(summary: WeeklySummary):
 def main():
     """Main Streamlit application."""
     
-    conn = st.connection("supabase",type=SupabaseConnection)
+    # Try to initialize Supabase connection, but gracefully handle missing configuration
+    conn = None
+    try:
+        conn = st.connection("supabase", type=SupabaseConnection)
+    except Exception as e:
+        # Supabase not configured - disable authentication features
+        st.warning("⚠️ Supabase authentication not configured. Running in demo mode without authentication.")
+        conn = None
 
     st.set_page_config(
         page_title="CHB Dashboard",
@@ -494,20 +501,26 @@ def main():
         initial_sidebar_state="expanded"
     )
     
-    # Initialize authentication
-    init_authentication()
-    
-    # Check if user is authenticated
-    if not st.session_state.authenticated:
-        # Show appropriate form based on state
-        if st.session_state.get('show_signup', False):
-            signup_form(conn)
-        elif st.session_state.get('show_password_reset', False):
-            password_reset_form(conn)
-        else:
-            # Show login form
-            login_form(conn)
-        return
+    # Initialize authentication - skip if no Supabase connection
+    if conn is not None:
+        init_authentication()
+        
+        # Check if user is authenticated
+        if not st.session_state.authenticated:
+            # Show appropriate form based on state
+            if st.session_state.get('show_signup', False):
+                signup_form(conn)
+            elif st.session_state.get('show_password_reset', False):
+                password_reset_form(conn)
+            else:
+                # Show login form
+                login_form(conn)
+            return
+    else:
+        # Demo mode - skip authentication
+        st.session_state.authenticated = True
+        st.session_state.user_email = "demo@example.com"
+        st.session_state.user_id = "demo_user"
     
     # User is authenticated - show dashboard
     # Sidebar navigation
@@ -520,8 +533,13 @@ def main():
     )
     
     # Show user info and logout button in sidebar
-    show_user_info()
-    logout_button()
+    if conn is not None:
+        show_user_info()
+        logout_button()
+    else:
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 👤 Demo Mode")
+        st.sidebar.markdown("**Email:** demo@example.com")
     
     if page == "Weekly Summaries":
         show_weekly_summaries()
@@ -672,7 +690,7 @@ def show_weekly_summaries():
 
 def show_booking_system():
     """Show the booking system interface."""
-    from .booking_service import booking_service
+    from notion_processing.booking_service import booking_service
     
     st.title("📅 CHB Booking System")
     st.markdown("Request services and manage quotes from CHB.")
@@ -692,7 +710,7 @@ def show_booking_system():
 
 def show_new_booking_form():
     """Show the new booking request form."""
-    from .booking_service import booking_service
+    from notion_processing.booking_service import booking_service
     
     st.header("📝 New Booking Request")
     st.markdown("Fill out the form below to request a service from CHB.")
@@ -767,7 +785,7 @@ def show_new_booking_form():
 
 def show_customer_quotes():
     """Show quotes for the current customer."""
-    from .booking_service import booking_service
+    from notion_processing.booking_service import booking_service
     
     st.header("💰 My Quotes")
     st.markdown("View quotes for your booking requests.")
@@ -780,14 +798,14 @@ def show_customer_quotes():
         # Find customer by email
         session = db_manager.get_session()
         try:
-            from .database import CustomerDB
+            from notion_processing.database import CustomerDB
             customer = session.query(CustomerDB).filter(
                 CustomerDB.email == customer_email
             ).first()
             
             if customer:
                 # Get booking requests for this customer
-                from .database import BookingRequestDB, QuoteDB
+                from notion_processing.database import BookingRequestDB, QuoteDB
                 booking_requests = session.query(BookingRequestDB).filter(
                     BookingRequestDB.customer_id == customer.id
                 ).order_by(BookingRequestDB.created_at.desc()).all()
@@ -849,7 +867,7 @@ def show_quote_confirmation():
     # For demo purposes, show a sample quote that needs confirmation
     st.info("💡 This section shows quotes that are waiting for customer confirmation.")
     
-    from .booking_service import booking_service
+    from notion_processing.booking_service import booking_service
     
     # Get pending quotes
     pending_quotes = booking_service.get_pending_quotes()
@@ -903,7 +921,7 @@ def show_admin_panel():
 
 def show_admin_booking_requests():
     """Show all booking requests for admin review."""
-    from .booking_service import booking_service
+    from notion_processing.booking_service import booking_service
     
     st.header("📋 All Booking Requests")
     
@@ -947,7 +965,7 @@ def show_admin_booking_requests():
 
 def show_admin_create_quote():
     """Show form for creating quotes."""
-    from .booking_service import booking_service
+    from notion_processing.booking_service import booking_service
     
     st.header("💰 Create Quote")
     st.markdown("Create a quote for a booking request.")
@@ -955,7 +973,7 @@ def show_admin_create_quote():
     # Get all pending booking requests (without quotes)
     session = db_manager.get_session()
     try:
-        from .database import BookingRequestDB, QuoteDB
+        from notion_processing.database import BookingRequestDB, QuoteDB
         
         # Get requests that don't have quotes yet or need new quotes
         requests_without_quotes = session.query(BookingRequestDB).filter(
@@ -966,7 +984,7 @@ def show_admin_create_quote():
             # Create selectbox options
             request_options = {}
             for req in requests_without_quotes:
-                from .database import CustomerDB
+                from notion_processing.database import CustomerDB
                 customer = session.query(CustomerDB).filter(
                     CustomerDB.id == req.customer_id
                 ).first()
