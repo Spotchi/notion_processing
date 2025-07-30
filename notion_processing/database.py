@@ -12,14 +12,16 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    Boolean,
+    ForeignKey,
     create_engine,
     func,
 )
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.pool import StaticPool
 
-from .models import DocumentType, ProcessingStatus, SubCategory
+from .models import DocumentType, ProcessingStatus, SubCategory, BookingStatus, QuoteStatus
 
 Base = declarative_base()
 
@@ -84,11 +86,78 @@ class ProcessingRecordDB(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
 
+# Booking System Database Models
+
+class CustomerDB(Base):
+    """Database model for customers."""
+    __tablename__ = "customers"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False)
+    email = Column(String, nullable=False, unique=True, index=True)
+    phone = Column(String, nullable=True)
+    company = Column(String, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    
+    # Relationships
+    booking_requests = relationship("BookingRequestDB", back_populates="customer")
+
+
+class BookingRequestDB(Base):
+    """Database model for booking requests."""
+    __tablename__ = "booking_requests"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
+    service_type = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    preferred_date = Column(DateTime, nullable=True)
+    location = Column(String, nullable=True)
+    status = Column(Enum(BookingStatus), nullable=False, default=BookingStatus.PENDING)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    customer = relationship("CustomerDB", back_populates="booking_requests")
+    quotes = relationship("QuoteDB", back_populates="booking_request")
+
+
+class QuoteDB(Base):
+    """Database model for quotes."""
+    __tablename__ = "quotes"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    booking_request_id = Column(Integer, ForeignKey("booking_requests.id"), nullable=False)
+    price = Column(Float, nullable=False)
+    currency = Column(String, nullable=False, default="USD")
+    description = Column(Text, nullable=False)
+    valid_until = Column(DateTime, nullable=False)
+    status = Column(Enum(QuoteStatus), nullable=False, default=QuoteStatus.PENDING)
+    confirmed_at = Column(DateTime, nullable=True)
+    confirmed_by_customer = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    booking_request = relationship("BookingRequestDB", back_populates="quotes")
+
+
 class DatabaseManager:
     """Manages database connections and operations."""
     
     def __init__(self, database_url: Optional[str] = None):
         """Initialize database manager."""
+        self._engine = None
+        self._SessionLocal = None
+        self._database_url = database_url
+    
+    def _ensure_initialized(self):
+        """Ensure the database manager is initialized."""
+        if self._engine is not None:
+            return
+            
+        database_url = self._database_url
+        
         if database_url is None:
             # Try to get from environment variable first
             database_url = os.getenv("DATABASE_URL")
@@ -98,7 +167,7 @@ class DatabaseManager:
                 try:
                     import streamlit as st
                     database_url = st.secrets.get("DATABASE_URL")
-                except (ImportError, AttributeError):
+                except (ImportError, AttributeError, Exception):
                     # Streamlit not available or secrets not configured
                     pass
             
@@ -118,25 +187,28 @@ class DatabaseManager:
                 "sslmode": "require"
             }
         
-        self.engine = create_engine(database_url, **engine_kwargs)
-        self.SessionLocal = sessionmaker(
+        self._engine = create_engine(database_url, **engine_kwargs)
+        self._SessionLocal = sessionmaker(
             autocommit=False,
             autoflush=False,
-            bind=self.engine
+            bind=self._engine
         )
     
     def create_tables(self):
         """Create all database tables."""
-        Base.metadata.create_all(bind=self.engine)
+        self._ensure_initialized()
+        Base.metadata.create_all(bind=self._engine)
     
     def get_session(self):
         """Get a database session."""
-        return self.SessionLocal()
+        self._ensure_initialized()
+        return self._SessionLocal()
     
     def close(self):
         """Close database connections."""
-        self.engine.dispose()
+        if self._engine:
+            self._engine.dispose()
 
 
-# Global database manager instance
+# Global database manager instance - will be initialized lazily
 db_manager = DatabaseManager() 

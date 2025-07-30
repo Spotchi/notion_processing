@@ -488,7 +488,7 @@ def main():
     conn = st.connection("supabase",type=SupabaseConnection)
 
     st.set_page_config(
-        page_title="Weekly Summaries Dashboard",
+        page_title="CHB Dashboard",
         page_icon="📊",
         layout="wide",
         initial_sidebar_state="expanded"
@@ -510,12 +510,31 @@ def main():
         return
     
     # User is authenticated - show dashboard
-    st.title("📊 Weekly Summaries Dashboard")
-    st.markdown("View and analyze weekly summaries of processed Notion documents.")
+    # Sidebar navigation
+    st.sidebar.title("CHB Dashboard")
+    
+    # Navigation menu
+    page = st.sidebar.selectbox(
+        "Select Page",
+        ["Weekly Summaries", "Booking System", "Admin Panel"]
+    )
     
     # Show user info and logout button in sidebar
     show_user_info()
     logout_button()
+    
+    if page == "Weekly Summaries":
+        show_weekly_summaries()
+    elif page == "Booking System":
+        show_booking_system()
+    elif page == "Admin Panel":
+        show_admin_panel()
+
+
+def show_weekly_summaries():
+    """Show the weekly summaries dashboard."""
+    st.title("📊 Weekly Summaries Dashboard")
+    st.markdown("View and analyze weekly summaries of processed Notion documents.")
     
     # Information about new features
     st.info("💡 **New Feature**: You can now view the list of documents for each weekly summary. The system queries documents by date range to show you what was processed during each week.")
@@ -649,6 +668,374 @@ def main():
         )
     else:
         st.info("No data available for the selected date range.")
+
+
+def show_booking_system():
+    """Show the booking system interface."""
+    from .booking_service import booking_service
+    
+    st.title("📅 CHB Booking System")
+    st.markdown("Request services and manage quotes from CHB.")
+    
+    # Tab selection
+    tab1, tab2, tab3 = st.tabs(["New Booking Request", "My Quotes", "Quote Confirmation"])
+    
+    with tab1:
+        show_new_booking_form()
+    
+    with tab2:
+        show_customer_quotes()
+    
+    with tab3:
+        show_quote_confirmation()
+
+
+def show_new_booking_form():
+    """Show the new booking request form."""
+    from .booking_service import booking_service
+    
+    st.header("📝 New Booking Request")
+    st.markdown("Fill out the form below to request a service from CHB.")
+    
+    with st.form("booking_request_form"):
+        # Customer information
+        st.subheader("Customer Information")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            customer_name = st.text_input("Full Name *", placeholder="Enter your full name")
+            customer_email = st.text_input("Email Address *", placeholder="Enter your email")
+        
+        with col2:
+            customer_phone = st.text_input("Phone Number", placeholder="Enter your phone number")
+            customer_company = st.text_input("Company", placeholder="Enter your company (optional)")
+        
+        # Service details
+        st.subheader("Service Details")
+        service_type = st.selectbox(
+            "Service Type *",
+            ["Consulting", "Development", "Maintenance", "Training", "Other"]
+        )
+        
+        description = st.text_area(
+            "Service Description *",
+            placeholder="Please describe your requirements in detail...",
+            height=150
+        )
+        
+        col3, col4 = st.columns(2)
+        with col3:
+            preferred_date = st.date_input("Preferred Date", value=None)
+        
+        with col4:
+            location = st.text_input("Location", placeholder="Service location (if applicable)")
+        
+        # Submit button
+        submitted = st.form_submit_button("Submit Booking Request", type="primary")
+        
+        if submitted:
+            if not customer_name or not customer_email or not description:
+                st.error("Please fill in all required fields (*)")
+            else:
+                try:
+                    # Create or get customer
+                    customer = booking_service.create_customer(
+                        name=customer_name,
+                        email=customer_email,
+                        phone=customer_phone,
+                        company=customer_company
+                    )
+                    
+                    # Create booking request
+                    booking_request = booking_service.create_booking_request(
+                        customer_id=customer.id,
+                        service_type=service_type,
+                        description=description,
+                        preferred_date=datetime.combine(preferred_date, datetime.min.time()) if preferred_date else None,
+                        location=location
+                    )
+                    
+                    st.success(f"✅ Booking request submitted successfully! Request ID: {booking_request.id}")
+                    st.info("CHB will review your request and provide a quote within 24 hours.")
+                    
+                    # Store the request ID in session state for easy access
+                    st.session_state.last_booking_request_id = booking_request.id
+                    
+                except Exception as e:
+                    st.error(f"Error submitting booking request: {str(e)}")
+
+
+def show_customer_quotes():
+    """Show quotes for the current customer."""
+    from .booking_service import booking_service
+    
+    st.header("💰 My Quotes")
+    st.markdown("View quotes for your booking requests.")
+    
+    # Get email from user input for demo purposes
+    # In a real application, this would be tied to the authenticated user
+    customer_email = st.text_input("Enter your email to view quotes:", placeholder="your.email@example.com")
+    
+    if customer_email:
+        # Find customer by email
+        session = db_manager.get_session()
+        try:
+            from .database import CustomerDB
+            customer = session.query(CustomerDB).filter(
+                CustomerDB.email == customer_email
+            ).first()
+            
+            if customer:
+                # Get booking requests for this customer
+                from .database import BookingRequestDB, QuoteDB
+                booking_requests = session.query(BookingRequestDB).filter(
+                    BookingRequestDB.customer_id == customer.id
+                ).order_by(BookingRequestDB.created_at.desc()).all()
+                
+                if booking_requests:
+                    for request in booking_requests:
+                        with st.expander(f"Request #{request.id} - {request.service_type} ({request.status.value})"):
+                            st.write(f"**Description:** {request.description}")
+                            st.write(f"**Requested:** {request.created_at.strftime('%Y-%m-%d %H:%M')}")
+                            if request.preferred_date:
+                                st.write(f"**Preferred Date:** {request.preferred_date.strftime('%Y-%m-%d')}")
+                            if request.location:
+                                st.write(f"**Location:** {request.location}")
+                            
+                            # Get quote for this request
+                            quote = session.query(QuoteDB).filter(
+                                QuoteDB.booking_request_id == request.id
+                            ).order_by(QuoteDB.created_at.desc()).first()
+                            
+                            if quote:
+                                st.write(f"**Quote:** {quote.currency} {quote.price:,.2f}")
+                                st.write(f"**Quote Description:** {quote.description}")
+                                st.write(f"**Valid Until:** {quote.valid_until.strftime('%Y-%m-%d %H:%M')}")
+                                st.write(f"**Status:** {quote.status.value}")
+                                
+                                if quote.status.value == "sent" and quote.valid_until > datetime.utcnow():
+                                    col1, col2 = st.columns(2)
+                                    with col1:
+                                        if st.button(f"✅ Confirm Quote #{quote.id}", key=f"confirm_{quote.id}"):
+                                            if booking_service.confirm_quote(quote.id, True):
+                                                st.success("Quote confirmed successfully!")
+                                                st.rerun()
+                                            else:
+                                                st.error("Failed to confirm quote.")
+                                    
+                                    with col2:
+                                        if st.button(f"❌ Reject Quote #{quote.id}", key=f"reject_{quote.id}"):
+                                            if booking_service.confirm_quote(quote.id, False):
+                                                st.success("Quote rejected.")
+                                                st.rerun()
+                                            else:
+                                                st.error("Failed to reject quote.")
+                            else:
+                                st.info("No quote available yet. CHB will provide a quote soon.")
+                else:
+                    st.info("No booking requests found for this email.")
+            else:
+                st.warning("No customer found with this email address.")
+        
+        finally:
+            session.close()
+
+
+def show_quote_confirmation():
+    """Show pending quotes that need confirmation."""
+    st.header("🔔 Quote Confirmation")
+    st.markdown("Confirm or reject quotes for your services.")
+    
+    # For demo purposes, show a sample quote that needs confirmation
+    st.info("💡 This section shows quotes that are waiting for customer confirmation.")
+    
+    from .booking_service import booking_service
+    
+    # Get pending quotes
+    pending_quotes = booking_service.get_pending_quotes()
+    
+    if pending_quotes:
+        st.write(f"**{len(pending_quotes)} quotes awaiting customer confirmation:**")
+        
+        for item in pending_quotes:
+            quote = item['quote']
+            booking_request = item['booking_request']
+            customer = item['customer']
+            
+            with st.expander(f"Quote #{quote.id} for {customer.name if customer else 'Unknown'} - {quote.currency} {quote.price:,.2f}"):
+                if customer:
+                    st.write(f"**Customer:** {customer.name} ({customer.email})")
+                if booking_request:
+                    st.write(f"**Service:** {booking_request.service_type}")
+                    st.write(f"**Description:** {booking_request.description}")
+                
+                st.write(f"**Quote Amount:** {quote.currency} {quote.price:,.2f}")
+                st.write(f"**Quote Description:** {quote.description}")
+                st.write(f"**Valid Until:** {quote.valid_until.strftime('%Y-%m-%d %H:%M')}")
+                st.write(f"**Status:** {quote.status.value}")
+                
+                # Show time remaining
+                time_remaining = quote.valid_until - datetime.utcnow()
+                if time_remaining.days > 0:
+                    st.write(f"**Time Remaining:** {time_remaining.days} days")
+                else:
+                    st.write(f"**Time Remaining:** {time_remaining.seconds // 3600} hours")
+                
+                st.markdown("**Customer needs to confirm this quote to proceed with the booking.**")
+    else:
+        st.info("No pending quotes at the moment.")
+
+
+def show_admin_panel():
+    """Show the admin panel for managing bookings and quotes."""
+    st.title("🔧 Admin Panel")
+    st.markdown("Manage booking requests and create quotes.")
+    
+    # Only show admin panel to authenticated users (in a real app, check for admin role)
+    tab1, tab2 = st.tabs(["Booking Requests", "Create Quote"])
+    
+    with tab1:
+        show_admin_booking_requests()
+    
+    with tab2:
+        show_admin_create_quote()
+
+
+def show_admin_booking_requests():
+    """Show all booking requests for admin review."""
+    from .booking_service import booking_service
+    
+    st.header("📋 All Booking Requests")
+    
+    # Get all booking requests
+    all_requests = booking_service.get_all_booking_requests()
+    
+    if all_requests:
+        for item in all_requests:
+            request = item['request']
+            customer = item['customer']
+            quote = item['quote']
+            
+            with st.expander(f"Request #{request.id} - {customer.name if customer else 'Unknown'} ({request.status.value})"):
+                if customer:
+                    st.write(f"**Customer:** {customer.name}")
+                    st.write(f"**Email:** {customer.email}")
+                    if customer.phone:
+                        st.write(f"**Phone:** {customer.phone}")
+                    if customer.company:
+                        st.write(f"**Company:** {customer.company}")
+                
+                st.write(f"**Service Type:** {request.service_type}")
+                st.write(f"**Description:** {request.description}")
+                st.write(f"**Requested:** {request.created_at.strftime('%Y-%m-%d %H:%M')}")
+                
+                if request.preferred_date:
+                    st.write(f"**Preferred Date:** {request.preferred_date.strftime('%Y-%m-%d')}")
+                if request.location:
+                    st.write(f"**Location:** {request.location}")
+                
+                if quote:
+                    st.write(f"**Current Quote:** {quote.currency} {quote.price:,.2f}")
+                    st.write(f"**Quote Status:** {quote.status.value}")
+                    if quote.confirmed_by_customer:
+                        st.success("✅ Quote confirmed by customer")
+                else:
+                    st.info("No quote created yet")
+    else:
+        st.info("No booking requests found.")
+
+
+def show_admin_create_quote():
+    """Show form for creating quotes."""
+    from .booking_service import booking_service
+    
+    st.header("💰 Create Quote")
+    st.markdown("Create a quote for a booking request.")
+    
+    # Get all pending booking requests (without quotes)
+    session = db_manager.get_session()
+    try:
+        from .database import BookingRequestDB, QuoteDB
+        
+        # Get requests that don't have quotes yet or need new quotes
+        requests_without_quotes = session.query(BookingRequestDB).filter(
+            BookingRequestDB.status.in_(['pending', 'quoted'])
+        ).all()
+        
+        if requests_without_quotes:
+            # Create selectbox options
+            request_options = {}
+            for req in requests_without_quotes:
+                from .database import CustomerDB
+                customer = session.query(CustomerDB).filter(
+                    CustomerDB.id == req.customer_id
+                ).first()
+                
+                customer_name = customer.name if customer else "Unknown"
+                option_text = f"Request #{req.id} - {customer_name} - {req.service_type}"
+                request_options[option_text] = req.id
+            
+            selected_request = st.selectbox(
+                "Select Booking Request:",
+                options=list(request_options.keys())
+            )
+            
+            if selected_request:
+                request_id = request_options[selected_request]
+                
+                # Show request details
+                request = session.query(BookingRequestDB).filter(
+                    BookingRequestDB.id == request_id
+                ).first()
+                
+                if request:
+                    st.subheader("Request Details")
+                    st.write(f"**Service Type:** {request.service_type}")
+                    st.write(f"**Description:** {request.description}")
+                    
+                    # Quote form
+                    with st.form("create_quote_form"):
+                        st.subheader("Create Quote")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            price = st.number_input("Price", min_value=0.0, step=0.01, format="%.2f")
+                            currency = st.selectbox("Currency", ["USD", "EUR", "GBP"])
+                        
+                        with col2:
+                            validity_days = st.number_input("Valid for (days)", min_value=1, max_value=90, value=30)
+                        
+                        quote_description = st.text_area(
+                            "Quote Description",
+                            placeholder="Describe what is included in this quote...",
+                            height=100
+                        )
+                        
+                        submitted = st.form_submit_button("Create Quote", type="primary")
+                        
+                        if submitted:
+                            if price > 0 and quote_description:
+                                try:
+                                    quote = booking_service.create_quote(
+                                        booking_request_id=request_id,
+                                        price=price,
+                                        description=quote_description,
+                                        currency=currency,
+                                        validity_days=validity_days
+                                    )
+                                    
+                                    st.success(f"✅ Quote created successfully! Quote ID: {quote.id}")
+                                    st.info("The customer will be notified and can now confirm or reject the quote.")
+                                    
+                                except Exception as e:
+                                    st.error(f"Error creating quote: {str(e)}")
+                            else:
+                                st.error("Please enter a valid price and description.")
+        else:
+            st.info("No pending booking requests found.")
+    
+    finally:
+        session.close()
 
 
 if __name__ == "__main__":

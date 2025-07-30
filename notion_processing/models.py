@@ -106,4 +106,72 @@ class ProcessingRecord(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
     class Config:
+        from_attributes = True
+
+
+# Booking System Models
+
+class BookingStatus(str, Enum):
+    """Status of booking requests."""
+    PENDING = "pending"
+    QUOTED = "quoted"
+    CONFIRMED = "confirmed"
+    REJECTED = "rejected"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class QuoteStatus(str, Enum):
+    """Status of quotes."""
+    PENDING = "pending"
+    SENT = "sent"
+    CONFIRMED = "confirmed"
+    REJECTED = "rejected"
+    EXPIRED = "expired"
+
+
+class Customer(BaseModel):
+    """Model for customer information."""
+    id: Optional[int] = Field(None, description="Customer ID")
+    name: str = Field(..., description="Customer name")
+    email: str = Field(..., description="Customer email")
+    phone: Optional[str] = Field(None, description="Customer phone number")
+    company: Optional[str] = Field(None, description="Customer company")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    class Config:
+        from_attributes = True
+
+
+class BookingRequest(BaseModel):
+    """Model for booking requests."""
+    id: Optional[int] = Field(None, description="Booking request ID")
+    customer_id: int = Field(..., description="Customer ID")
+    service_type: str = Field(..., description="Type of service requested")
+    description: str = Field(..., description="Detailed description of requirements")
+    preferred_date: Optional[datetime] = Field(None, description="Preferred service date")
+    location: Optional[str] = Field(None, description="Service location")
+    status: BookingStatus = Field(default=BookingStatus.PENDING, description="Booking status")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    class Config:
+        from_attributes = True
+
+
+class Quote(BaseModel):
+    """Model for quotes."""
+    id: Optional[int] = Field(None, description="Quote ID")
+    booking_request_id: int = Field(..., description="Associated booking request ID")
+    price: float = Field(..., ge=0, description="Quoted price")
+    currency: str = Field(default="USD", description="Currency code")
+    description: str = Field(..., description="Quote description")
+    valid_until: datetime = Field(..., description="Quote expiration date")
+    status: QuoteStatus = Field(default=QuoteStatus.PENDING, description="Quote status")
+    confirmed_at: Optional[datetime] = Field(None, description="When quote was confirmed")
+    confirmed_by_customer: bool = Field(default=False, description="Whether customer confirmed the quote")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    class Config:
         from_attributes = True 
