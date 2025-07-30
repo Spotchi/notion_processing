@@ -106,4 +106,46 @@ class ProcessingRecord(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
     class Config:
+        from_attributes = True
+
+
+class QuoteStatus(str, Enum):
+    """Status of quote in booking process."""
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    REJECTED = "rejected"
+    EXPIRED = "expired"
+
+
+class Quote(BaseModel):
+    """Model for booking quotes."""
+    id: Optional[int] = Field(None, description="Quote ID")
+    customer_name: str = Field(..., description="Customer name")
+    customer_email: str = Field(..., description="Customer email")
+    service_description: str = Field(..., description="Description of requested service")
+    quoted_price: float = Field(..., ge=0, description="Quoted price in currency units")
+    currency: str = Field(default="USD", description="Currency code")
+    valid_until: datetime = Field(..., description="Quote expiration date")
+    status: QuoteStatus = Field(default=QuoteStatus.PENDING, description="Quote confirmation status")
+    notes: Optional[str] = Field(None, description="Additional notes or terms")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    confirmed_at: Optional[datetime] = Field(None, description="When quote was confirmed")
+    
+    class Config:
+        from_attributes = True
+
+
+class Booking(BaseModel):
+    """Model for booking requests."""
+    id: Optional[int] = Field(None, description="Booking ID")
+    quote_id: int = Field(..., description="Associated quote ID")
+    customer_name: str = Field(..., description="Customer name")
+    customer_email: str = Field(..., description="Customer email")
+    service_description: str = Field(..., description="Description of requested service")
+    requested_date: Optional[datetime] = Field(None, description="Requested service date")
+    special_requirements: Optional[str] = Field(None, description="Special requirements or notes")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    class Config:
         from_attributes = True 

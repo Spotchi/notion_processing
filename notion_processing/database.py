@@ -19,7 +19,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from .models import DocumentType, ProcessingStatus, SubCategory
+from .models import DocumentType, ProcessingStatus, SubCategory, QuoteStatus
 
 Base = declarative_base()
 
@@ -80,6 +80,38 @@ class ProcessingRecordDB(Base):
     extracted_at = Column(DateTime, nullable=True)
     classified_at = Column(DateTime, nullable=True)
     error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class QuoteDB(Base):
+    """Database model for booking quotes."""
+    __tablename__ = "quotes"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    customer_name = Column(String, nullable=False)
+    customer_email = Column(String, nullable=False)
+    service_description = Column(Text, nullable=False)
+    quoted_price = Column(Float, nullable=False)
+    currency = Column(String, default="USD", nullable=False)
+    valid_until = Column(DateTime, nullable=False)
+    status = Column(Enum(QuoteStatus), default=QuoteStatus.PENDING, nullable=False)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    confirmed_at = Column(DateTime, nullable=True)
+
+
+class BookingDB(Base):
+    """Database model for booking requests."""
+    __tablename__ = "bookings"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    quote_id = Column(Integer, nullable=False)
+    customer_name = Column(String, nullable=False)
+    customer_email = Column(String, nullable=False)
+    service_description = Column(Text, nullable=False)
+    requested_date = Column(DateTime, nullable=True)
+    special_requirements = Column(Text, nullable=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 

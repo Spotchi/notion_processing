@@ -13,8 +13,8 @@ from st_supabase_connection import SupabaseConnection
 
 from plotly.subplots import make_subplots
 
-from notion_processing.database import WeeklySummaryDB, db_manager, NotionDocumentDB
-from notion_processing.models import WeeklySummary
+from notion_processing.database import WeeklySummaryDB, db_manager, NotionDocumentDB, QuoteDB, BookingDB
+from notion_processing.models import WeeklySummary, Quote, Booking, QuoteStatus
 
 
 def init_authentication():
@@ -482,13 +482,285 @@ def display_summary_details(summary: WeeklySummary):
         st.plotly_chart(fig, use_container_width=True)
 
 
+def save_quote(quote_data: dict) -> int:
+    """Save a new quote to the database and return the quote ID."""
+    session = db_manager.get_session()
+    
+    try:
+        quote_db = QuoteDB(
+            customer_name=quote_data['customer_name'],
+            customer_email=quote_data['customer_email'],
+            service_description=quote_data['service_description'],
+            quoted_price=quote_data['quoted_price'],
+            currency=quote_data.get('currency', 'USD'),
+            valid_until=quote_data['valid_until'],
+            status=quote_data.get('status', QuoteStatus.PENDING),
+            notes=quote_data.get('notes')
+        )
+        
+        session.add(quote_db)
+        session.commit()
+        quote_id = quote_db.id
+        
+        return quote_id
+    
+    except Exception as e:
+        session.rollback()
+        st.error(f"Error saving quote: {str(e)}")
+        return None
+    finally:
+        session.close()
+
+
+def get_quote_by_id(quote_id: int) -> Optional[Quote]:
+    """Get a quote by its ID."""
+    session = db_manager.get_session()
+    
+    try:
+        quote_db = session.query(QuoteDB).filter(QuoteDB.id == quote_id).first()
+        
+        if quote_db:
+            return Quote(
+                id=quote_db.id,
+                customer_name=quote_db.customer_name,
+                customer_email=quote_db.customer_email,
+                service_description=quote_db.service_description,
+                quoted_price=quote_db.quoted_price,
+                currency=quote_db.currency,
+                valid_until=quote_db.valid_until,
+                status=quote_db.status,
+                notes=quote_db.notes,
+                created_at=quote_db.created_at,
+                confirmed_at=quote_db.confirmed_at
+            )
+        return None
+    
+    except Exception as e:
+        st.error(f"Error loading quote: {str(e)}")
+        return None
+    finally:
+        session.close()
+
+
+def update_quote_status(quote_id: int, status: QuoteStatus, confirmed_at: Optional[datetime] = None) -> bool:
+    """Update the status of a quote."""
+    session = db_manager.get_session()
+    
+    try:
+        quote_db = session.query(QuoteDB).filter(QuoteDB.id == quote_id).first()
+        
+        if quote_db:
+            quote_db.status = status
+            if confirmed_at:
+                quote_db.confirmed_at = confirmed_at
+            session.commit()
+            return True
+        return False
+    
+    except Exception as e:
+        session.rollback()
+        st.error(f"Error updating quote status: {str(e)}")
+        return False
+    finally:
+        session.close()
+
+
+def save_booking(booking_data: dict) -> int:
+    """Save a new booking to the database and return the booking ID."""
+    session = db_manager.get_session()
+    
+    try:
+        booking_db = BookingDB(
+            quote_id=booking_data['quote_id'],
+            customer_name=booking_data['customer_name'],
+            customer_email=booking_data['customer_email'],
+            service_description=booking_data['service_description'],
+            requested_date=booking_data.get('requested_date'),
+            special_requirements=booking_data.get('special_requirements')
+        )
+        
+        session.add(booking_db)
+        session.commit()
+        booking_id = booking_db.id
+        
+        return booking_id
+    
+    except Exception as e:
+        session.rollback()
+        st.error(f"Error saving booking: {str(e)}")
+        return None
+    finally:
+        session.close()
+
+
+def booking_request_form():
+    """Display booking request form with quote confirmation."""
+    st.title("📝 Booking Request")
+    st.markdown("Request a service quote and confirm your booking with CHB.")
+    
+    # Check if we're viewing an existing quote
+    quote_id = st.query_params.get("quote_id")
+    viewing_quote = quote_id is not None
+    
+    if viewing_quote:
+        # Display existing quote for confirmation
+        quote = get_quote_by_id(int(quote_id))
+        if quote:
+            display_quote_confirmation(quote)
+        else:
+            st.error("Quote not found.")
+            st.stop()
+    else:
+        # New booking request form
+        display_booking_request_form()
+
+
+def display_quote_confirmation(quote: Quote):
+    """Display quote confirmation interface."""
+    st.subheader("Quote Confirmation")
+    
+    # Quote details
+    with st.container():
+        st.markdown("### Quote Details")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.info(f"""
+            **Customer:** {quote.customer_name}
+            **Email:** {quote.customer_email}
+            **Service:** {quote.service_description}
+            """)
+        
+        with col2:
+            st.info(f"""
+            **Quoted Price:** ${quote.quoted_price:.2f} {quote.currency}
+            **Valid Until:** {quote.valid_until.strftime('%Y-%m-%d %H:%M')}
+            **Status:** {quote.status.value.title()}
+            """)
+        
+        if quote.notes:
+            st.markdown(f"**Notes:** {quote.notes}")
+    
+    # Quote confirmation actions
+    if quote.status == QuoteStatus.PENDING:
+        st.markdown("---")
+        st.subheader("Confirm Quote")
+        st.markdown("Please review the quote details above and confirm if you accept the offered price.")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("✅ Confirm Quote", type="primary", use_container_width=True):
+                success = update_quote_status(quote.id, QuoteStatus.CONFIRMED, datetime.utcnow())
+                if success:
+                    st.success("Quote confirmed successfully! You can now proceed with booking.")
+                    st.rerun()
+        
+        with col2:
+            if st.button("❌ Reject Quote", use_container_width=True):
+                success = update_quote_status(quote.id, QuoteStatus.REJECTED)
+                if success:
+                    st.warning("Quote rejected.")
+                    st.rerun()
+        
+        with col3:
+            if st.button("🔙 Back to New Request", use_container_width=True):
+                st.query_params.clear()
+                st.rerun()
+    
+    elif quote.status == QuoteStatus.CONFIRMED:
+        st.success("✅ Quote has been confirmed!")
+        st.markdown("You can now proceed with your booking or contact CHB for next steps.")
+        
+        if st.button("🔙 Back to New Request"):
+            st.query_params.clear()
+            st.rerun()
+    
+    elif quote.status == QuoteStatus.REJECTED:
+        st.warning("❌ This quote has been rejected.")
+        
+        if st.button("🔙 Back to New Request"):
+            st.query_params.clear()
+            st.rerun()
+    
+    else:
+        st.warning("This quote is no longer available.")
+
+
+def display_booking_request_form():
+    """Display the new booking request form."""
+    st.subheader("New Booking Request")
+    st.markdown("Please fill out the form below to request a service quote from CHB.")
+    
+    with st.form("booking_request_form"):
+        # Customer information
+        st.markdown("#### Customer Information")
+        customer_name = st.text_input("Full Name", placeholder="Enter your full name")
+        customer_email = st.text_input("Email Address", placeholder="Enter your email address")
+        
+        # Service details
+        st.markdown("#### Service Details")
+        service_description = st.text_area(
+            "Service Description", 
+            placeholder="Please describe the service you need...",
+            height=100
+        )
+        
+        requested_date = st.date_input(
+            "Preferred Service Date (Optional)",
+            value=None,
+            help="Select your preferred date for the service"
+        )
+        
+        special_requirements = st.text_area(
+            "Special Requirements (Optional)",
+            placeholder="Any special requirements or additional notes...",
+            height=80
+        )
+        
+        # Submit button
+        submit_button = st.form_submit_button("Submit Request", type="primary")
+        
+        if submit_button:
+            if customer_name and customer_email and service_description:
+                # Create a sample quote (in real app, this would be generated by CHB)
+                sample_quoted_price = 100.0 + (len(service_description) * 0.5)  # Simple pricing logic
+                valid_until = datetime.utcnow() + timedelta(days=7)  # Quote valid for 7 days
+                
+                quote_data = {
+                    'customer_name': customer_name,
+                    'customer_email': customer_email,
+                    'service_description': service_description,
+                    'quoted_price': sample_quoted_price,
+                    'currency': 'USD',
+                    'valid_until': valid_until,
+                    'status': QuoteStatus.PENDING,
+                    'notes': 'Sample quote generated for demonstration. CHB will review and provide final pricing.'
+                }
+                
+                with st.spinner("Generating quote..."):
+                    quote_id = save_quote(quote_data)
+                
+                if quote_id:
+                    st.success("Quote generated successfully!")
+                    st.info("Please review and confirm the quote below.")
+                    
+                    # Redirect to quote confirmation
+                    st.query_params["quote_id"] = str(quote_id)
+                    st.rerun()
+                else:
+                    st.error("Failed to generate quote. Please try again.")
+            else:
+                st.error("Please fill in all required fields (Name, Email, and Service Description).")
+
+
 def main():
     """Main Streamlit application."""
     
     conn = st.connection("supabase",type=SupabaseConnection)
 
     st.set_page_config(
-        page_title="Weekly Summaries Dashboard",
+        page_title="CHB Services Dashboard",
         page_icon="📊",
         layout="wide",
         initial_sidebar_state="expanded"
@@ -509,13 +781,31 @@ def main():
             login_form(conn)
         return
     
-    # User is authenticated - show dashboard
-    st.title("📊 Weekly Summaries Dashboard")
-    st.markdown("View and analyze weekly summaries of processed Notion documents.")
+    # Sidebar navigation
+    st.sidebar.header("Navigation")
+    page = st.sidebar.selectbox(
+        "Select Page",
+        ["📊 Weekly Summaries", "📝 Booking Request"],
+        index=0
+    )
     
     # Show user info and logout button in sidebar
     show_user_info()
     logout_button()
+    
+    # Route to appropriate page
+    if page == "📝 Booking Request":
+        booking_request_form()
+    else:
+        # Default to weekly summaries dashboard
+        display_weekly_summaries_dashboard()
+
+
+def display_weekly_summaries_dashboard():
+    """Display the weekly summaries dashboard."""
+    # User is authenticated - show dashboard
+    st.title("📊 Weekly Summaries Dashboard")
+    st.markdown("View and analyze weekly summaries of processed Notion documents.")
     
     # Information about new features
     st.info("💡 **New Feature**: You can now view the list of documents for each weekly summary. The system queries documents by date range to show you what was processed during each week.")
